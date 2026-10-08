@@ -1,0 +1,55 @@
+name: Daily Train - Quant Horse
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 每日 UTC 02:00 = HKT 10:00
+  workflow_dispatch: # 容許手動觸發
+
+permissions:
+  contents: write # 只給寫code權限
+
+concurrency:
+  group: daily-train
+  cancel-in-progress: false
+
+jobs:
+  train-and-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install catboost scikit-learn pandas plotly
+
+      - name: Run training
+        run: |
+          python main.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 只在 bets.csv 真有變動才commit，避免空commit
+          if [ -n "$(git status --porcelain bets.csv)" ]; then
+            git add bets.csv
+            git commit -m "chore: auto update bets.csv [skip ci]"
+            git push
+            echo "✅ bets.csv updated and pushed"
+          else
+            echo "ℹ️ No changes in bets.csv"
+          fi
