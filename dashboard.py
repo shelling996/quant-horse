@@ -1,45 +1,25 @@
 import streamlit as st
-import pandas as pd
-import os
-
+import pandas as pd, os
 st.set_page_config(page_title="Quant Horse", layout="wide")
 st.title("🐎 Quant Horse - SSD投注系統")
-st.caption("訓練在後端 (GitHub Actions) | 顯示在前端 (Streamlit)")
+st.caption("訓練在後端 | 顯示在前端")
 
 if not os.path.exists('bets.csv'):
-    st.warning("未有 bets.csv，請等 GitHub Actions 跑完 (31s)")
+    st.warning("等 GitHub Actions 跑完")
     st.stop()
 
-try:
-    bets = pd.read_csv('bets.csv')
-    st.success(f"今日推薦 {len(bets)} 場 | Date: {bets['date'].iloc[0]}")
-    
-    # 容錯：舊版有profit，新版無就即時計
-    if 'profit' not in bets.columns:
-        bets['profit'] = 0
-    if 'bankroll' not in bets.columns:
-        bets['bankroll'] = 1 + bets['f_final'].cumsum() if 'f_final' in bets.columns else 1
-    if 'cum_profit' not in bets.columns:
-        bets['cum_profit'] = bets['f_final'].cumsum() if 'f_final' in bets.columns else 0
-    
-    st.dataframe(bets, use_container_width=True)
-    
-    col1, col2, col3 = st.columns(3)
-    if 'Value' in bets.columns:
-        col1.metric("平均 Value", f"{bets['Value'].mean():.2f}")
-    if 'f_final' in bets.columns:
-        col2.metric("總注碼", f"{bets['f_final'].sum()*100:.1f}%")
-        col3.metric("平均 P_model", f"{bets['P_model'].mean()*100:.1f}%" if 'P_model' in bets.columns else "N/A")
-    
-    if 'bankroll' in bets.columns:
-        st.subheader("本金曲線")
-        st.line_chart(bets[['bankroll']])
-    if 'cum_profit' in bets.columns:
-        st.subheader("累積Profit")
-        st.line_chart(bets[['cum_profit']])
-        
-except Exception as e:
-    st.error(f"讀取 bets.csv 失敗: {e}")
-    st.code(str(e))
-    if os.path.exists('bets.csv'):
-        st.text(open('bets.csv','r').read()[:2000])
+bets = pd.read_csv('bets.csv')
+st.success(f"今日推薦 {len(bets)} 場 | Date: {bets['date'].iloc[0]} | 平均Value: {bets['Value'].mean():.2f}")
+
+# 只顯示有用欄，唔顯示bankroll=1果啲怪欄
+show_cols = ['race_id','horse_id','P_model','P_market','Value','f_final','market_odds']
+st.dataframe(bets[show_cols].style.format({'P_model':'{:.2%}','P_market':'{:.2%}','Value':'{:.2f}','f_final':'{:.1%}'}), use_container_width=True)
+
+c1,c2,c3 = st.columns(3)
+c1.metric("平均Value", f"{bets['Value'].mean():.2f}", help=">1.5先有價值")
+c2.metric("總注碼", f"{bets['f_final'].sum()*100:.1f}%", help="半Kelly+6%封頂")
+c3.metric("平均模型勝率", f"{bets['P_model'].mean()*100:.1f}%")
+
+st.subheader("本金曲線 (模擬)")
+st.line_chart(bets[['bankroll']])
+st.caption("profit=0 係正常，因為係未來賽事未跑。bankroll只係模擬注碼累加，真profit要賽後先知。")
